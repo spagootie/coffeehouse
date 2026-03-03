@@ -93,3 +93,31 @@ bool ChatRepository::deleteUser(int id) {
 
     return mysql_query(conn, query.str().c_str()) == 0;
 }
+
+std::vector<Message> ChatRepository::getMessagesWithUsers(int convoId) {
+    std::vector<Message> messages;
+
+    std::stringstream query;
+    query << "SELECT u.username, m.content "
+          << "FROM messages m "
+          << "JOIN users u ON m.sender_id = u.user_id "
+          << "WHERE m.conversation_id = " << convoId
+          << " ORDER BY m.message_id ASC"; // keep chronological order
+
+    if (mysql_query(conn, query.str().c_str()) != 0) {
+        return messages;
+    }
+
+    MYSQL_RES* res = mysql_store_result(conn);
+    MYSQL_ROW row;
+
+    while ((row = mysql_fetch_row(res))) {
+        Message msg;
+        msg.sender = row[0];
+        msg.text = row[1];
+        messages.push_back(msg);
+    }
+
+    mysql_free_result(res);
+    return messages;
+}

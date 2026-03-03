@@ -12,7 +12,7 @@ public:
     int createUser(const std::string& username, const std::string& displayName);
 
     bool postMessage(int convoId, int senderId, const std::string& content);
-    std::vector<std::string> fetchMessages(int convoId);
+    std::vector<Message> fetchMessages(int convoId);
     bool updateUser(int id, const std::string& username, const std::string& displayName);
     bool removeUser(int id);
 

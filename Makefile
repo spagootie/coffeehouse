@@ -17,7 +17,7 @@ CLIENT_DIR = client
 DATA_SRC = $(DATA_DIR)/ChatRepository.cpp
 BUSINESS_SRC = $(BUSINESS_DIR)/ChatService.cpp
 SERVER_SRC = $(SERVICE_DIR)/server.cpp
-CLIENT_SRC = $(CLIENT_DIR)/client.cpp
+CLIENT_SRC = $(CLIENT_DIR)/web_client.cpp
 
 # Object files
 DATA_OBJ = $(DATA_SRC:.cpp=.o)

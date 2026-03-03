@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chat App</title>
+<style>
+body { margin:0; font-family:Arial; display:flex; height:100vh; }
+#sidebar { width:250px; background:#2c3e50; color:white; padding:10px; overflow-y:auto; }
+.user { padding:8px; cursor:pointer; border-radius:4px; }
+.user:hover { background:#34495e; }
+#chat { flex:1; display:flex; flex-direction:column; }
+#messages { flex:1; padding:10px; overflow-y:auto; background:#ecf0f1; }
+.message { margin-bottom:10px; padding:8px; background:white; border-radius:4px; }
+#inputBar { display:flex; padding:10px; background:#bdc3c7; }
+#inputBar input { flex:1; padding:8px; }
+#inputBar button { padding:8px; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+<h2>Users</h2>
+<div id="userList"></div>
+</div>
+
+<div id="chat">
+<div id="messages"></div>
+<div id="inputBar">
+<input id="messageInput" placeholder="Type a message..." />
+<button onclick="sendMessage()">Send</button>
+</div>
+</div>
+
+<script>
+let currentConversation = null;
+let currentUserId = 1; // replace with actual logged-in user id if you have login
+
+async function loadUsers() {
+    const res = await fetch("/users");
+    const data = await res.json();
+
+    const list = document.getElementById("userList");
+    list.innerHTML = "";
+
+    data.users.forEach((username,index)=>{
+        const div = document.createElement("div");
+        div.className = "user";
+        div.innerText = username;
+        div.onclick = ()=> loadMessages(index+1);
+        list.appendChild(div);
+    });
+}
+
+async function loadMessages(convoId) {
+    currentConversation = convoId;
+    const res = await fetch(`/messages/${convoId}`);
+    const data = await res.json();
+
+    const box = document.getElementById("messages");
+    box.innerHTML = "";
+    data.messages.forEach(m=>{
+        const div = document.createElement("div");
+        div.className = "message";
+        div.innerHTML = `<b>${m.sender}:</b> ${m.text}`;
+        box.appendChild(div);
+    });
+}
+
+async function sendMessage() {
+    const input = document.getElementById("messageInput");
+    const text = input.value.trim();
+    if (!text || !currentConversation) return;
+
+    await fetch("/messages", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+            convoId: currentConversation,
+            senderId: currentUserId,
+            text: text
+        })
+    });
+
+    input.value = "";
+    loadMessages(currentConversation);
+}
+
+loadUsers();
+</script>
+</body>
+</html>

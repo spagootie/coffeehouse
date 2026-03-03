@@ -14,9 +14,6 @@ bool ChatService::postMessage(int convoId, int senderId, const std::string& cont
     return repo.sendMessage(convoId, senderId, content);
 }
 
-std::vector<std::string> ChatService::fetchMessages(int convoId) {
-    return repo.getMessages(convoId);
-}
 
 bool ChatService::updateUser(int id, const std::string& username, const std::string& displayName) {
     if (id <= 0) return false;
@@ -27,4 +24,8 @@ bool ChatService::updateUser(int id, const std::string& username, const std::str
 bool ChatService::removeUser(int id) {
     if (id <= 0) return false;
     return repo.deleteUser(id);
+}
+
+std::vector<Message> ChatService::fetchMessages(int convoId) {
+    return repo.getMessagesWithUsers(convoId); // now contains sender + text
 }

@@ -5,6 +5,10 @@
 #include <string>
 #include <vector>
 
+struct Message {
+    std::string sender;
+    std::string text;
+};
 
 class ChatRepository {
 private:
@@ -21,6 +25,7 @@ public:
     std::vector<std::string> getMessages(int convoId);
     bool updateUser(int id, const std::string& username, const std::string& displayName);
     bool deleteUser(int id);
+    std::vector<Message> getMessagesWithUsers(int convoId);
 
     int getLastInsertId();
 
