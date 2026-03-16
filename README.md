@@ -1,338 +1,210 @@
-# 4-Tier Chat Application (C++ / MariaDB / Crow)
+# Chat Application Deployment Guide
 
 ## Overview
 
-This project implements a 4-tier chat application architecture:
+This document explains how to deploy the Chat Application locally.
+It lists all dependencies, database setup instructions, build steps,
+and how to verify that the system is functioning correctly.
 
-1. **Database Layer** – MariaDB database
-2. **Data Layer** – C++ repository classes using MariaDB C API
-3. **Business Layer** – C++ service classes containing validation and business logic
-4. **Service Layer** – REST API built using Crow (C++ web framework)
-5. **Client Layer** – Console application that consumes the REST API
-
-The purpose of this project is to demonstrate layered architecture where each tier has a clearly defined responsibility and communicates only with the adjacent layer.
+The repository also includes a working script called `deploy.sh`
+which automates most of the setup process.
 
 ---
 
-## Architecture
+# Project Structure
+
+Important directories in the repository:
 
 ```
-Console Client
-      ↓ HTTP
-Service Layer (Crow REST API)
-      ↓
-Business Layer (ChatService)
-      ↓
-Data Layer (ChatRepository)
-      ↓
-MariaDB Database
+client/
+business/
+data/
+service/
+sql/
+Makefile
+deploy.sh
+README.md
 ```
 
-Each layer exposes all functionality of the layer beneath it, as required.
+Each directory corresponds to a layer in the application architecture.
+
+- **Client layer** – browser interface and test client  
+- **Service layer** – HTTP server  
+- **Business layer** – application logic  
+- **Data layer** – database access  
+- **SQL directory** – schema and seed data  
 
 ---
 
-## Technologies Used
+# Required Software
 
-- C++17
-- MariaDB
-- MariaDB C Client Library (`libmysqlclient`)
-- Crow (header-only C++ web framework)
-- Boost (required by Crow)
-- GNU Make
-- Linux (tested on Ubuntu/Debian-based systems)
+## Arch Linux
 
----
-
-## Project Structure
-
-```
-chat-app/
-│
-├── data/
-│   ├── ChatRepository.h
-│   └── ChatRepository.cpp
-│
-├── business/
-│   ├── ChatService.h
-│   └── ChatService.cpp
-│
-├── service/
-│   └── server.cpp
-│
-├── client/
-│   └── client.cpp
-│
-├── external/
-│   └── Crow/
-│       └── include/
-│
-├── Makefile
-├── tables.sql
-├── insert.sql
-└── README.md
+```bash
+sudo pacman -Syu
+sudo pacman -S base-devel mariadb gcc make asio
 ```
 
----
+## Debian / Ubuntu
 
-## Layer Responsibilities
-
-### Database Layer
-Contains:
-- Tables
-- Constraints
-- Relationships
-Defined in:
-- `tables.sql`
-- `insert.sql`
-
-### Data Layer (ChatRepository)
-- Connects to MariaDB
-- Performs CRUD operations
-- Contains raw SQL queries
-- No business logic
-
-### Business Layer (ChatService)
-- Wraps all data layer methods
-- Adds validation
-- Acts as an abstraction over the repository
-
-### Service Layer (Crow REST API)
-- Exposes HTTP endpoints
-- Calls business layer methods
-- Returns JSON responses
-
-### Client Layer
-- Console-based
-- Makes HTTP requests to service layer
-- Demonstrates full CRUD flow
-
----
-
-## Installation Instructions (Linux)
-
-### 1. Install Dependencies
-
-```
+```bash
 sudo apt update
-sudo apt install build-essential
-sudo apt install libmysqlclient-dev
-sudo apt install libboost-all-dev
+sudo apt install build-essential mariadb-server \
+                 default-libmysqlclient-dev libasio-dev
 ```
 
-### 2. Clone Crow
+Required components:
 
-Inside the project root:
+- MariaDB database server
+- MariaDB client development libraries
+- ASIO networking library
+- g++ compiler with C++17 support
+- make build tool
 
-```
-git clone https://github.com/CrowCpp/Crow.git external/Crow
-```
+Crow headers are included in the repository.
 
-Crow is used as a header-only dependency.
+####Once you have all of the dependencies, just run deploy.sh. Everything below is for running it manually.
 
 ---
 
-## Database Setup
+# Database Setup
 
-### 1. Start MariaDB
+Start MariaDB:
 
-```
+```bash
 sudo systemctl start mariadb
+sudo systemctl enable mariadb
 ```
 
-### 2. Create Database
+Create the database and user:
 
-```
-mysql -u root -p
-```
-
-Inside MariaDB:
-
-```
-CREATE DATABASE chat_app;
-USE chat_app;
-SOURCE tables.sql;
-SOURCE insert.sql;
+```bash
+sudo mariadb <<SQL
+CREATE DATABASE IF NOT EXISTS chat_app;
+CREATE USER IF NOT EXISTS 'chat_user'@'localhost'
+IDENTIFIED BY 'chatpass';
+GRANT ALL PRIVILEGES ON chat_app.* TO 'chat_user'@'localhost';
+FLUSH PRIVILEGES;
+SQL
 ```
 
-Ensure the credentials in `ChatRepository.cpp` match your MariaDB configuration:
+Import schema and seed data:
 
-```
-const char* HOST = "localhost";
-const char* USER = "chat_user";
-const char* PASS = "chatpass";
-const char* DB   = "chat_app";
+```bash
+mariadb -u chat_user -pchatpass chat_app < sql/tables.sql
+mariadb -u chat_user -pchatpass chat_app < sql/insert.sql
 ```
 
 ---
 
-## Build Instructions
+# Building the Project
 
-From the project root:
+From the project root directory:
 
-```
+```bash
+make clean
 make
 ```
 
-This builds:
-- `server`
-- `client`
+This compiles the server binary.
 
 ---
 
-## Running the Application
+# Running the Server
 
-### Start the Server
+Start the server:
 
+```bash
+./mychat-server
 ```
-make run-server
-```
 
-Server runs at:
+Open the application in a browser:
 
 ```
 http://localhost:18080
 ```
 
-### Run the Client
+---
 
-In another terminal:
+# Verification
 
+To confirm the system works:
+
+1. Open the web interface.
+2. Create a user through the UI.
+
+Verify with SQL:
+
+```bash
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM users;"
 ```
-make run-client
+
+3. Create a conversation.
+4. Send a message.
+
+Verify messages in the database:
+
+```bash
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM messages;"
 ```
+
+5. Edit a message.
+6. Delete a message.
 
 ---
 
-## Available API Endpoints
+# Testing the API
 
-### Get All Users
+Example request:
 
-```
-GET /users
-```
-
-Example:
-
-```
+```bash
 curl http://localhost:18080/users
 ```
 
----
+Query recent messages:
 
-### Create User
-
-```
-POST /users
-```
-
-Example:
-
-```
-curl -X POST http://localhost:18080/users \
--H "Content-Type: application/json" \
--d '{"username":"madison","displayName":"Madison"}'
+```bash
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM messages ORDER BY message_id DESC LIMIT 10;"
 ```
 
 ---
 
-### Get Messages for Conversation
+# Troubleshooting
 
-```
-GET /messages/<conversation_id>
-```
+**Database does not exist**
 
-Example:
+Create it manually:
 
-```
-curl http://localhost:18080/messages/1
+```sql
+CREATE DATABASE chat_app;
 ```
 
----
+**Server returns 404**
 
-## Demonstrating Full CRUD Flow
+Ensure the server is started from the repository root directory.
 
-To demonstrate service functionality:
+**MariaDB running with skip-grant-tables**
 
-1. Insert a user via POST
-2. Retrieve users via GET
-3. Insert a message
-4. Retrieve messages
-5. Delete (if implemented)
-6. Confirm deletion via GET
+Restart MariaDB:
 
-Take screenshots of:
-- Server running
-- Curl responses
-- Database query results
-- Client execution
-
----
-
-## Makefile Targets
-
-Build everything:
-
-```
-make
-```
-
-Run server:
-
-```
-make run-server
-```
-
-Run client:
-
-```
-make run-client
-```
-
-Clean build artifacts:
-
-```
-make clean
+```bash
+sudo systemctl restart mariadb
 ```
 
 ---
 
-## Hosting Options
+# Screenshot Checklist
 
-This service can be hosted on:
+Include screenshots showing:
 
-- Render
-- Railway
-- AWS EC2
-- Docker container
-
-Basic deployment steps:
-1. Push repository to GitHub
-2. Install dependencies on host
-3. Run `make`
-4. Execute `./server`
-
----
-
-## Notes
-
-- C++17 is required.
-- MariaDB client development library must be installed.
-- Boost headers are required for Crow.
-- Linux is required for this Makefile configuration.
-
----
-
-## Summary
-
-This project demonstrates a properly layered architecture:
-
-- Clear separation of concerns
-- HTTP-based service layer
-- Business logic abstraction
-- Database interaction encapsulation
-- Build automation with Make
-- Testable via console and curl
-
-The design models real-world professional application structure and deployment workflow.
-
+1. Web interface loaded
+2. Creating a user
+3. Database showing inserted user
+4. Creating a conversation
+5. Sending a message
+6. Editing a message
+7. Deleting a message
+8. Running the automated test client

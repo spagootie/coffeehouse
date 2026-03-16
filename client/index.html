@@ -1,91 +1,261 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Chat App</title>
+<meta charset="utf-8" />
+<title>Chat App - Robust Client</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-body { margin:0; font-family:Arial; display:flex; height:100vh; }
-#sidebar { width:250px; background:#2c3e50; color:white; padding:10px; overflow-y:auto; }
-.user { padding:8px; cursor:pointer; border-radius:4px; }
-.user:hover { background:#34495e; }
-#chat { flex:1; display:flex; flex-direction:column; }
-#messages { flex:1; padding:10px; overflow-y:auto; background:#ecf0f1; }
-.message { margin-bottom:10px; padding:8px; background:white; border-radius:4px; }
-#inputBar { display:flex; padding:10px; background:#bdc3c7; }
-#inputBar input { flex:1; padding:8px; }
-#inputBar button { padding:8px; }
+  body { margin:0; font-family:Arial,Helvetica,sans-serif; display:flex; height:100vh; }
+  #sidebar { width:300px; background:#2c3e50; color:white; padding:12px; overflow-y:auto; box-sizing:border-box; }
+  .user, .convo { padding:8px; cursor:pointer; border-radius:4px; margin-bottom:6px; }
+  .user:hover, .convo:hover { background:#34495e; }
+  #chat { flex:1; display:flex; flex-direction:column; }
+  #messages { flex:1; padding:12px; overflow-y:auto; background:#ecf0f1; box-sizing:border-box; }
+  .message { margin-bottom:10px; padding:10px; background:white; border-radius:6px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+  .left { flex:1; }
+  .controls { display:flex; gap:8px; align-items:center; }
+  button { cursor:pointer; border:0; background:#2c3e50; color:white; padding:6px 10px; border-radius:4px; }
+  button[disabled] { opacity:.6; cursor:not-allowed; }
+  #inputBar { display:flex; padding:12px; background:#bdc3c7; gap:8px; }
+  #inputBar input { flex:1; padding:8px; border-radius:4px; border:1px solid #999; }
 </style>
 </head>
 <body>
 
 <div id="sidebar">
-<h2>Users</h2>
-<div id="userList"></div>
+  <h2 style="margin:0 0 8px 0">Users</h2>
+  <div id="userList"></div>
+  <small style="color:#ddd">Click a user to act as them for tests.</small>
+
+  <h3 style="margin-top:16px">Conversations</h3>
+  <div id="convoList"></div>
+
+  <div style="margin-top:8px; display:flex; gap:6px;">
+    <input id="newConvoTitle" placeholder="New convo title" style="flex:1; padding:8px; border-radius:4px; border:1px solid #999;" />
+    <button id="createConvoBtn" type="button">New</button>
+  </div>
 </div>
 
 <div id="chat">
-<div id="messages"></div>
-<div id="inputBar">
-<input id="messageInput" placeholder="Type a message..." />
-<button onclick="sendMessage()">Send</button>
-</div>
+  <div id="messages" aria-live="polite"></div>
+  <div id="inputBar">
+    <input id="messageInput" placeholder="Type a message..." />
+    <button id="sendBtn" type="button">Send</button>
+  </div>
 </div>
 
 <script>
+/* Robust client using event delegation — drop-in replacement.
+   Expects API:
+     GET  /users -> { users: ["alice","bob", ...] }
+     GET  /conversations -> { conversations: [{conversation_id:1,title:"X"}, ...] }
+     POST /conversations {title}
+     POST /conversations/:id/participants {userId}
+     GET  /messages/:convoId -> { messages: [{message_id, sender, text}, ...] }
+     POST /messages {convoId, senderId, text}
+     PUT  /messages/:id {content}
+     DELETE /messages/:id
+*/
+
 let currentConversation = null;
-let currentUserId = 1; // replace with actual logged-in user id if you have login
+let currentUserId = 1;
+let usersMap = [];
 
-async function loadUsers() {
-    const res = await fetch("/users");
-    const data = await res.json();
-
-    const list = document.getElementById("userList");
-    list.innerHTML = "";
-
-    data.users.forEach((username,index)=>{
-        const div = document.createElement("div");
-        div.className = "user";
-        div.innerText = username;
-        div.onclick = ()=> loadMessages(index+1);
-        list.appendChild(div);
-    });
+function log(...a){ console.log('[client]', ...a); }
+async function safeJson(res){
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch(e){
+    console.error('Invalid JSON from server:', text);
+    throw new Error('Invalid JSON');
+  }
 }
 
-async function loadMessages(convoId) {
-    currentConversation = convoId;
-    const res = await fetch(`/messages/${convoId}`);
-    const data = await res.json();
-
-    const box = document.getElementById("messages");
-    box.innerHTML = "";
-    data.messages.forEach(m=>{
-        const div = document.createElement("div");
-        div.className = "message";
-        div.innerHTML = `<b>${m.sender}:</b> ${m.text}`;
-        box.appendChild(div);
+async function loadUsers(){
+  try {
+    const res = await fetch('/users');
+    if (!res.ok) { console.error('GET /users failed', res.status); return; }
+    const data = await safeJson(res);
+    usersMap = data.users || [];
+    const ul = document.getElementById('userList');
+    ul.innerHTML = '';
+    usersMap.forEach((u, i) => {
+      const id = i+1;
+      const d = document.createElement('div');
+      d.className = 'user';
+      d.innerText = `${u} (id:${id})`;
+      d.onclick = () => { currentUserId = id; highlightUser(id); if (currentConversation) loadMessages(currentConversation); };
+      ul.appendChild(d);
     });
+    highlightUser(currentUserId);
+  } catch(e){ console.error('loadUsers', e); }
+}
+function highlightUser(id){
+  Array.from(document.querySelectorAll('#userList .user')).forEach((el,i)=>{
+    el.style.background = (i+1 === id) ? '#1b2833' : 'transparent';
+  });
 }
 
-async function sendMessage() {
-    const input = document.getElementById("messageInput");
-    const text = input.value.trim();
-    if (!text || !currentConversation) return;
-
-    await fetch("/messages", {
-        method: "POST",
-        headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({
-            convoId: currentConversation,
-            senderId: currentUserId,
-            text: text
-        })
+async function loadConversations(){
+  try {
+    const res = await fetch('/conversations');
+    if (!res.ok) { console.error('GET /conversations failed', res.status); return; }
+    const data = await safeJson(res);
+    const list = document.getElementById('convoList');
+    list.innerHTML = '';
+    (data.conversations || []).forEach(c => {
+      const d = document.createElement('div');
+      d.className = 'convo';
+      d.innerText = `${c.title || 'Untitled'} (id:${c.conversation_id})`;
+      d.onclick = () => loadMessages(c.conversation_id);
+      list.appendChild(d);
     });
-
-    input.value = "";
-    loadMessages(currentConversation);
+  } catch(e){ console.error('loadConversations', e); }
 }
 
-loadUsers();
+document.getElementById('createConvoBtn').addEventListener('click', async ()=>{
+  const title = document.getElementById('newConvoTitle').value || 'Untitled';
+  try {
+    const r = await fetch('/conversations', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({title})});
+    log('POST /conversations', r.status);
+    if (!r.ok) alert('Create failed: ' + r.status + ' ' + await r.text());
+    else { document.getElementById('newConvoTitle').value=''; await loadConversations(); }
+  } catch(e){ console.error('createConvo', e); alert('Create failed'); }
+});
+
+document.getElementById('sendBtn').addEventListener('click', async ()=>{
+  const text = document.getElementById('messageInput').value.trim();
+  if (!text) { alert('Enter a message'); return; }
+  if (!currentConversation) { alert('Select a conversation'); return; }
+  try {
+    const r = await fetch('/messages', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({convoId:currentConversation, senderId:currentUserId, text})});
+    log('POST /messages', r.status);
+    if (!r.ok) { alert('Send failed: ' + r.status + ' ' + await r.text()); return; }
+    document.getElementById('messageInput').value='';
+    await loadMessages(currentConversation);
+  } catch(e){ console.error('sendMessage', e); alert('Send failed'); }
+});
+
+/* Event delegation for message controls:
+   Buttons include data-action="edit" or "delete" on them and the parent .message has data-id.
+   This ensures clicks always resolve to an element and we don't rely on per-button closures.
+*/
+const messagesEl = document.getElementById('messages');
+messagesEl.addEventListener('click', async (ev) => {
+  // find nearest button
+  const btn = ev.target.closest('button');
+  if (!btn) return; // not a button click
+  ev.preventDefault();
+  ev.stopPropagation();
+  const action = btn.dataset.action;
+  const messageEl = btn.closest('.message');
+  if (!messageEl) { console.warn('button without .message parent'); return; }
+  const id = messageEl.dataset.id;
+  if (!id) { alert('No id for this message'); return; }
+  if (action === 'edit') {
+    const newText = prompt('Edit message', messageEl.querySelector('.mtext').innerText);
+    if (newText === null) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/messages/' + id, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content:newText})});
+      log('PUT /messages/' + id, r.status);
+      if (!r.ok) {
+        const txt = await r.text();
+        alert('Edit failed: ' + r.status + ' ' + txt);
+      } else {
+        await loadMessages(currentConversation);
+      }
+    } catch(e){ console.error('edit fetch', e); alert('Edit failed (network)'); }
+    finally { btn.disabled = false; }
+  } else if (action === 'delete') {
+    if (!confirm('Delete message?')) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/messages/' + id, {method:'DELETE'});
+      log('DELETE /messages/' + id, r.status);
+      if (!r.ok) alert('Delete failed: ' + r.status + ' ' + await r.text());
+      else await loadMessages(currentConversation);
+    } catch(e){ console.error('delete fetch', e); alert('Delete failed (network)'); }
+    finally { btn.disabled = false; }
+  }
+});
+
+async function loadMessages(convoId){
+  if (!convoId) return;
+  currentConversation = convoId;
+  try {
+    const r = await fetch('/messages/' + convoId);
+    log('GET /messages/' + convoId, r.status);
+    if (!r.ok) {
+      const txt = await r.text();
+      alert('Failed to load messages: ' + r.status + ' ' + txt);
+      return;
+    }
+    const data = await safeJson(r);
+    const box = document.getElementById('messages');
+    box.innerHTML = '';
+    if (!Array.isArray(data.messages) || data.messages.length === 0) {
+      box.innerHTML = '<em style="padding:12px;display:block">No messages</em>';
+      return;
+    }
+    // create message nodes
+    data.messages.forEach(m => {
+      const mid = m.message_id || 0;
+      const el = document.createElement('div');
+      el.className = 'message';
+      el.dataset.id = String(mid);
+
+      const left = document.createElement('div');
+      left.className = 'left';
+      const s = document.createElement('div');
+      s.innerHTML = '<strong>' + escapeHtml(m.sender || 'unknown') + '</strong>';
+      const body = document.createElement('div');
+      body.className = 'mtext';
+      body.innerText = m.text || '';
+
+      left.appendChild(s);
+      left.appendChild(body);
+
+      const controls = document.createElement('div');
+      controls.className = 'controls';
+
+      const btnEdit = document.createElement('button');
+      btnEdit.type = 'button';
+      btnEdit.innerText = 'Edit';
+      btnEdit.dataset.action = 'edit';
+
+      const btnDel = document.createElement('button');
+      btnDel.type = 'button';
+      btnDel.innerText = 'Delete';
+      btnDel.dataset.action = 'delete';
+
+      // if no id, disable
+      if (!mid || mid === 0) {
+        btnEdit.disabled = true; btnDel.disabled = true;
+        const noid = document.createElement('em'); noid.style.marginLeft='8px'; noid.innerText='(no id)'; controls.appendChild(noid);
+      }
+
+      controls.appendChild(btnEdit);
+      controls.appendChild(btnDel);
+
+      el.appendChild(left);
+      el.appendChild(controls);
+      box.appendChild(el);
+    });
+    box.scrollTop = box.scrollHeight;
+  } catch(e){ console.error('loadMessages', e); alert('Failed to load messages (network)'); }
+}
+
+function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* initial wiring */
+window.addEventListener('load', async () => {
+  await loadUsers();
+  await loadConversations();
+  const first = document.querySelector('#convoList .convo');
+  if (first) first.click();
+});
 </script>
+
 </body>
 </html>

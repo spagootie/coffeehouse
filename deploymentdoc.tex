@@ -1,0 +1,231 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{hyperref}
+\usepackage{fancyvrb}
+\usepackage{enumitem}
+\setlist{nosep}
+
+\title{Chat Application Deployment Guide}
+\author{Course Project}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Overview}
+
+This document explains how to deploy the Chat Application locally.
+It describes all required dependencies, database setup, build steps,
+and how to verify that the system is working correctly.
+
+The repository also includes a working script called \texttt{deploy.sh}
+that automates most of the setup process.
+
+\section*{Project Structure}
+
+The repository contains the following important directories:
+
+\begin{verbatim}
+client/
+business/
+data/
+service/
+sql/
+Makefile
+deploy.sh
+README.md
+\end{verbatim}
+
+Each layer corresponds to the layered architecture required by the project.
+
+\begin{itemize}
+\item Client layer: HTML and test client
+\item Service layer: HTTP server
+\item Business layer: application logic
+\item Data layer: database access
+\item SQL directory: database schema and seed data
+\end{itemize}
+
+\section*{Required Software}
+
+The following dependencies must be installed before building the project.
+
+\subsection*{Arch Linux}
+
+\begin{verbatim}
+sudo pacman -Syu
+sudo pacman -S base-devel mariadb gcc make asio
+\end{verbatim}
+
+\subsection*{Debian / Ubuntu}
+
+\begin{verbatim}
+sudo apt update
+sudo apt install build-essential mariadb-server \
+                 default-libmysqlclient-dev libasio-dev
+\end{verbatim}
+
+Required components:
+
+\begin{itemize}
+\item MariaDB database server
+\item MariaDB client development libraries
+\item ASIO networking library
+\item g++ compiler with C++17 support
+\item make build tool
+\end{itemize}
+
+Crow headers are already included in the repository.
+
+
+\textbf{!!! ATTENTION !!!!}
+To do eveything below, you can simply run the included deploy.sh script
+by running:
+
+\begin{verbatim}
+./deploy.sh
+\end{verbatim}
+
+
+
+\section*{Database Setup}
+Start the MariaDB server:
+
+\begin{verbatim}
+sudo systemctl start mariadb
+sudo systemctl enable mariadb
+\end{verbatim}
+
+Create the database and user:
+
+\begin{verbatim}
+sudo mariadb <<SQL
+CREATE DATABASE IF NOT EXISTS chat_app;
+CREATE USER IF NOT EXISTS 'chat_user'@'localhost'
+IDENTIFIED BY 'chatpass';
+GRANT ALL PRIVILEGES ON chat_app.* TO 'chat_user'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+\end{verbatim}
+
+Import the schema and seed data:
+
+\begin{verbatim}
+mariadb -u chat_user -pchatpass chat_app < sql/tables.sql
+mariadb -u chat_user -pchatpass chat_app < sql/insert.sql
+\end{verbatim}
+
+\section*{Building the Project}
+
+From the root of the repository run:
+
+\begin{verbatim}
+make clean
+make
+\end{verbatim}
+
+This compiles the server binary.
+
+\section*{Running the Server}
+
+Start the server from the repository root directory.
+
+\begin{verbatim}
+./mychat-server
+\end{verbatim}
+
+Then open the application in a web browser:
+
+\begin{verbatim}
+http://localhost:18080
+\end{verbatim}
+
+\section*{Verification}
+
+To confirm the deployment was successful:
+
+\begin{enumerate}
+\item Open the web interface in a browser.
+\item Create a user through the UI.
+\item Verify the user exists in the database.
+
+\begin{verbatim}
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM users;"
+\end{verbatim}
+
+\item Create a conversation through the UI.
+\item Send a message.
+\item Verify the message in the database.
+
+\begin{verbatim}
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM messages;"
+\end{verbatim}
+
+\item Edit a message in the UI.
+\item Confirm the message text changed in the database.
+\item Delete a message and confirm it is removed.
+\end{enumerate}
+
+\section*{Testing the API}
+
+Example API test using curl:
+
+\begin{verbatim}
+curl http://localhost:18080/users
+\end{verbatim}
+
+Example SQL query for recent messages:
+
+\begin{verbatim}
+mariadb -u chat_user -pchatpass chat_app -e \
+"SELECT * FROM messages ORDER BY message_id DESC LIMIT 10;"
+\end{verbatim}
+
+\section*{Troubleshooting}
+
+Common problems:
+
+\begin{itemize}
+\item Database does not exist
+
+Create it using:
+
+\begin{verbatim}
+CREATE DATABASE chat_app;
+\end{verbatim}
+
+\item Server returns 404 on the root page
+
+Ensure the server is started from the repository root directory.
+
+\item MariaDB started with skip grant tables
+
+Restart MariaDB normally:
+
+\begin{verbatim}
+sudo systemctl restart mariadb
+\end{verbatim}
+
+\end{itemize}
+
+\section*{Screenshot Checklist}
+
+The following screenshots should be included in the final report.
+
+\begin{enumerate}
+\item Web interface loaded in browser
+\item Creating a user
+\item Database showing inserted user
+\item Creating a conversation
+\item Sending a message
+\item Editing a message
+\item Deleting a message
+\item Running the automated test client
+\end{enumerate}
+
+\end{document}
