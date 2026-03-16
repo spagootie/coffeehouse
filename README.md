@@ -63,7 +63,7 @@ Required components:
 
 Crow headers are included in the repository.
 
-####Once you have all of the dependencies, just run deploy.sh. Everything below is for running it manually.
+#Once you have all of the dependencies, just run deploy.sh. Everything below is for running it manually.
 
 ---
 
